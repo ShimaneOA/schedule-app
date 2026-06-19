@@ -252,7 +252,7 @@ base_date_const = datetime(2026, 6, 3).date()
 # 1. 組織週間ビュー（dayGridWeek）
 # ==========================================
 if view_mode == "組織週間 (マトリックス)":
-    st.caption("💡 枠をクリックで予定登録、予定バーをクリックで編集・削除ができます！")
+    st.caption("💡 枠を長押し（ロングタップ）で予定登録、予定バーをタップで編集・削除ができます！")
 
     # 全ユーザーの予定をイベントリストに変換
     week_cal_events = []
@@ -276,6 +276,7 @@ if view_mode == "組織週間 (マトリックス)":
         "locale": "ja",
         "firstDay": 0,
         "selectable": True,
+        "selectLongPressDelay": 500,
         "headerToolbar": {
             "left": "prev,next today",
             "center": "title",
@@ -297,16 +298,16 @@ if view_mode == "組織週間 (マトリックス)":
         events=week_cal_events,
         options=week_cal_options,
         custom_css=week_custom_css,
-        callbacks=["dateClick", "eventClick"],
+        callbacks=["select", "eventClick"],
         key="org_week_cal"
     )
 
     if st.session_state.just_registered:
         st.session_state.just_registered = False
     else:
-        if week_result and week_result.get("callback") == "dateClick":
+        if week_result and week_result.get("callback") == "select":
             from datetime import date as date_type
-            clicked_date = date_type.fromisoformat(week_result["dateClick"]["date"][:10])
+            clicked_date = date_type.fromisoformat(week_result["select"]["start"][:10])
             show_register_popup(clicked_date)
         if week_result and week_result.get("callback") == "eventClick":
             event_id = int(week_result["eventClick"]["event"]["id"])
@@ -319,7 +320,7 @@ elif view_mode == "個人月間 (カレンダー)":
     select_user = st.selectbox("表示する社員を選択", [u for u in USER_CREDS.keys() if u != "admin"])
     year, month = 2026, 6
 
-    st.caption("💡 カレンダーの枠（四角）をクリックすると、その日の予定登録ポップアップが開きます！")
+    st.caption("💡 枠を長押し（ロングタップ）で予定登録、予定バーをタップで編集・削除ができます！")
 
     # DBの予定をstreamlit-calendar用のイベントリストに変換
     user_events = df_schedules[df_schedules['user_name'] == select_user]
@@ -344,6 +345,7 @@ elif view_mode == "個人月間 (カレンダー)":
         "locale": "ja",
         "firstDay": 0,  # 日曜始まり
         "selectable": True,
+        "selectLongPressDelay": 500,
         "headerToolbar": {
             "left": "prev,next today",
             "center": "title",
@@ -351,7 +353,6 @@ elif view_mode == "個人月間 (カレンダー)":
         },
         "height": 650,
         "dayMaxEvents": 3,
-
     }
 
     custom_css = """
@@ -367,7 +368,7 @@ elif view_mode == "個人月間 (カレンダー)":
         events=cal_events,
         options=cal_options,
         custom_css=custom_css,
-        callbacks=["dateClick", "eventClick"],
+        callbacks=["select", "eventClick"],
         key=f"personal_cal_{select_user}"
     )
 
@@ -375,9 +376,9 @@ elif view_mode == "個人月間 (カレンダー)":
     if st.session_state.just_registered:
         st.session_state.just_registered = False
     else:
-        # 枠クリック時：登録ポップアップ
-        if cal_result and cal_result.get("callback") == "dateClick":
-            clicked_date_str = cal_result["dateClick"]["date"][:10]
+        # 長押し時：登録ポップアップ
+        if cal_result and cal_result.get("callback") == "select":
+            clicked_date_str = cal_result["select"]["start"][:10]
             from datetime import date
             clicked_date = date.fromisoformat(clicked_date_str)
             show_register_popup(clicked_date)
