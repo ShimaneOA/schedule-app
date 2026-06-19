@@ -39,6 +39,10 @@ if "just_registered" not in st.session_state:
     st.session_state.just_registered = False
 if "last_select_date" not in st.session_state:
     st.session_state.last_select_date = None
+if "last_click_date" not in st.session_state:
+    st.session_state.last_click_date = None
+if "last_click_time" not in st.session_state:
+    st.session_state.last_click_time = 0.0
 if "week_click_date" not in st.session_state:
     st.session_state.week_click_date = None
 if "week_click_user" not in st.session_state:
@@ -254,7 +258,7 @@ base_date_const = datetime(2026, 6, 3).date()
 # 1. 組織週間ビュー（dayGridWeek）
 # ==========================================
 if view_mode == "組織週間 (マトリックス)":
-    st.caption("💡 枠を長押し（ロングタップ）で予定登録、予定バーをタップで編集・削除ができます！")
+    st.caption("💡 枠をダブルクリック（ダブルタップ）で予定登録、予定バーをクリックで編集・削除ができます！")
 
     # 全ユーザーの予定をイベントリストに変換
     week_cal_events = []
@@ -278,7 +282,6 @@ if view_mode == "組織週間 (マトリックス)":
         "locale": "ja",
         "firstDay": 0,
         "selectable": True,
-        "selectLongPressDelay": 500,
         "headerToolbar": {
             "left": "prev,next today",
             "center": "title",
@@ -300,27 +303,35 @@ if view_mode == "組織週間 (マトリックス)":
         events=week_cal_events,
         options=week_cal_options,
         custom_css=week_custom_css,
-        callbacks=["select", "eventClick"],
+        callbacks=["dateClick", "eventClick"],
         key="org_week_cal"
     )
 
+    import time as _time
     if st.session_state.just_registered:
         st.session_state.just_registered = False
-        st.session_state.last_select_date = None
+        st.session_state.last_click_date = None
+        st.session_state.last_click_time = 0.0
     else:
-        if week_result and week_result.get("callback") == "select":
+        if week_result and week_result.get("callback") == "dateClick":
             from datetime import date as date_type
-            selected_date_str = week_result["select"]["start"][:10]
-            if selected_date_str != st.session_state.last_select_date:
-                st.session_state.last_select_date = selected_date_str
-                clicked_date = date_type.fromisoformat(selected_date_str)
+            clicked_date_str = week_result["dateClick"]["date"][:10]
+            now = _time.time()
+            if (clicked_date_str == st.session_state.last_click_date and
+                    now - st.session_state.last_click_time < 0.8):
+                # ダブルクリック検知
+                st.session_state.last_click_date = None
+                st.session_state.last_click_time = 0.0
+                clicked_date = date_type.fromisoformat(clicked_date_str)
                 show_register_popup(clicked_date)
+            else:
+                st.session_state.last_click_date = clicked_date_str
+                st.session_state.last_click_time = now
         elif week_result and week_result.get("callback") == "eventClick":
-            st.session_state.last_select_date = None
+            st.session_state.last_click_date = None
+            st.session_state.last_click_time = 0.0
             event_id = int(week_result["eventClick"]["event"]["id"])
             show_edit_popup(event_id, df_schedules)
-        else:
-            st.session_state.last_select_date = None
 
 # ==========================================
 # 2. 個人月間ビュー
@@ -329,7 +340,7 @@ elif view_mode == "個人月間 (カレンダー)":
     select_user = st.selectbox("表示する社員を選択", [u for u in USER_CREDS.keys() if u != "admin"])
     year, month = 2026, 6
 
-    st.caption("💡 枠を長押し（ロングタップ）で予定登録、予定バーをタップで編集・削除ができます！")
+    st.caption("💡 枠をダブルクリック（ダブルタップ）で予定登録、予定バーをクリックで編集・削除ができます！")
 
     # DBの予定をstreamlit-calendar用のイベントリストに変換
     user_events = df_schedules[df_schedules['user_name'] == select_user]
@@ -354,7 +365,6 @@ elif view_mode == "個人月間 (カレンダー)":
         "locale": "ja",
         "firstDay": 0,  # 日曜始まり
         "selectable": True,
-        "selectLongPressDelay": 500,
         "headerToolbar": {
             "left": "prev,next today",
             "center": "title",
@@ -377,31 +387,39 @@ elif view_mode == "個人月間 (カレンダー)":
         events=cal_events,
         options=cal_options,
         custom_css=custom_css,
-        callbacks=["select", "eventClick"],
+        callbacks=["dateClick", "eventClick"],
         key=f"personal_cal_{select_user}"
     )
 
     # 操作完了後のrerunではポップアップを開かずフラグをリセット
+    import time as _time
     if st.session_state.just_registered:
         st.session_state.just_registered = False
-        st.session_state.last_select_date = None
+        st.session_state.last_click_date = None
+        st.session_state.last_click_time = 0.0
     else:
-        # 長押し時：登録ポップアップ（同じ日付の重複表示を防ぐ）
-        if cal_result and cal_result.get("callback") == "select":
-            clicked_date_str = cal_result["select"]["start"][:10]
-            if clicked_date_str != st.session_state.last_select_date:
-                st.session_state.last_select_date = clicked_date_str
+        # ダブルクリック・ダブルタップで登録ポップアップ
+        if cal_result and cal_result.get("callback") == "dateClick":
+            clicked_date_str = cal_result["dateClick"]["date"][:10]
+            now = _time.time()
+            if (clicked_date_str == st.session_state.last_click_date and
+                    now - st.session_state.last_click_time < 0.8):
+                # ダブルクリック検知
+                st.session_state.last_click_date = None
+                st.session_state.last_click_time = 0.0
                 from datetime import date
                 clicked_date = date.fromisoformat(clicked_date_str)
                 show_register_popup(clicked_date)
+            else:
+                st.session_state.last_click_date = clicked_date_str
+                st.session_state.last_click_time = now
 
         # 予定クリック時：編集・削除ポップアップ
         elif cal_result and cal_result.get("callback") == "eventClick":
-            st.session_state.last_select_date = None
+            st.session_state.last_click_date = None
+            st.session_state.last_click_time = 0.0
             event_id = int(cal_result["eventClick"]["event"]["id"])
             show_edit_popup(event_id, df_schedules)
-        else:
-            st.session_state.last_select_date = None
 
 # ==========================================
 # 3. 🛠️ 修正・削除（カレンダーの予定をクリックで編集）
