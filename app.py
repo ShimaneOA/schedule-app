@@ -37,6 +37,8 @@ if "show_popup" not in st.session_state:
     st.session_state.show_popup = False
 if "just_registered" not in st.session_state:
     st.session_state.just_registered = False
+if "last_select_date" not in st.session_state:
+    st.session_state.last_select_date = None
 if "week_click_date" not in st.session_state:
     st.session_state.week_click_date = None
 if "week_click_user" not in st.session_state:
@@ -304,14 +306,21 @@ if view_mode == "組織週間 (マトリックス)":
 
     if st.session_state.just_registered:
         st.session_state.just_registered = False
+        st.session_state.last_select_date = None
     else:
         if week_result and week_result.get("callback") == "select":
             from datetime import date as date_type
-            clicked_date = date_type.fromisoformat(week_result["select"]["start"][:10])
-            show_register_popup(clicked_date)
-        if week_result and week_result.get("callback") == "eventClick":
+            selected_date_str = week_result["select"]["start"][:10]
+            if selected_date_str != st.session_state.last_select_date:
+                st.session_state.last_select_date = selected_date_str
+                clicked_date = date_type.fromisoformat(selected_date_str)
+                show_register_popup(clicked_date)
+        elif week_result and week_result.get("callback") == "eventClick":
+            st.session_state.last_select_date = None
             event_id = int(week_result["eventClick"]["event"]["id"])
             show_edit_popup(event_id, df_schedules)
+        else:
+            st.session_state.last_select_date = None
 
 # ==========================================
 # 2. 個人月間ビュー
@@ -375,18 +384,24 @@ elif view_mode == "個人月間 (カレンダー)":
     # 操作完了後のrerunではポップアップを開かずフラグをリセット
     if st.session_state.just_registered:
         st.session_state.just_registered = False
+        st.session_state.last_select_date = None
     else:
-        # 長押し時：登録ポップアップ
+        # 長押し時：登録ポップアップ（同じ日付の重複表示を防ぐ）
         if cal_result and cal_result.get("callback") == "select":
             clicked_date_str = cal_result["select"]["start"][:10]
-            from datetime import date
-            clicked_date = date.fromisoformat(clicked_date_str)
-            show_register_popup(clicked_date)
+            if clicked_date_str != st.session_state.last_select_date:
+                st.session_state.last_select_date = clicked_date_str
+                from datetime import date
+                clicked_date = date.fromisoformat(clicked_date_str)
+                show_register_popup(clicked_date)
 
         # 予定クリック時：編集・削除ポップアップ
-        if cal_result and cal_result.get("callback") == "eventClick":
+        elif cal_result and cal_result.get("callback") == "eventClick":
+            st.session_state.last_select_date = None
             event_id = int(cal_result["eventClick"]["event"]["id"])
             show_edit_popup(event_id, df_schedules)
+        else:
+            st.session_state.last_select_date = None
 
 # ==========================================
 # 3. 🛠️ 修正・削除（カレンダーの予定をクリックで編集）
