@@ -82,6 +82,12 @@ st.markdown(f"""
     
     /* 予定付箋 */
     .event-block {{ color: #333; padding: 4px 6px; border-radius: 3px; margin-bottom: 3px; font-size: 11px; line-height: 1.3; border-left: 4px solid rgba(0,0,0,0.2); box-shadow: 0 1px 2px rgba(0,0,0,0.05); }}
+    /* マトリックスセルの透明ボタン */
+    div[data-testid='stButton'] button.cell-btn {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        opacity: 0; cursor: pointer; z-index: 1;
+    }
+    .matrix-cell { position: relative; }
     /* サイドバーを非表示 */
     [data-testid="stSidebar"] {{ display: none; }}
     [data-testid="collapsedControl"] {{ display: none; }}
@@ -344,30 +350,41 @@ if view_mode == "組織週間 (マトリックス)":
                         f"<span style='color:#555;'>{ev['start_time']}</span> "
                         f"<strong>{ev['title']}</strong></div>"
                     )
-                st.markdown(
-                    f"<div style='border:{border}; min-height:90px; padding:3px; "
-                    f"background:{bg};'>{events_html}</div>",
-                    unsafe_allow_html=True
-                )
-                # ダブルクリックで登録
-                if st.button("＋", key=f"w_add_{user}_{day_str}",
-                             help=f"{user} / {day.month}/{day.day} に予定を登録（ダブルクリック）"):
-                    now = _time.time()
-                    click_key = f"{user}_{day_str}"
-                    if (click_key == st.session_state.last_click_date and
-                            now - st.session_state.last_click_time < 0.8):
-                        st.session_state.last_click_date = None
-                        st.session_state.last_click_time = 0.0
-                        st.session_state.week_click_date = day
-                        st.session_state.week_click_user = user
-                        st.rerun()
-                    else:
-                        st.session_state.last_click_date = click_key
-                        st.session_state.last_click_time = now
-                # 予定クリックで編集
+                # 枠全体を透明ボタンで覆う（ダブルクリックで登録）
+                cell_container = st.container()
+                with cell_container:
+                    # 予定と透明ボタンを重ねて表示
+                    st.markdown(
+                        f"<div class='matrix-cell' style='border:{border}; min-height:90px; "
+                        f"padding:3px; background:{bg}; position:relative;'>"
+                        f"{events_html}</div>",
+                        unsafe_allow_html=True
+                    )
+                    # 透明な全面ボタン（ダブルクリックで登録）
+                    btn_style = (
+                        "background:transparent; border:none; position:relative; "
+                        "width:100%; margin-top:-6px; color:transparent; "
+                        "cursor:pointer; font-size:1px;"
+                    )
+                    if st.button("　", key=f"w_add_{user}_{day_str}",
+                                 help=f"{user} / {day.month}/{day.day}（ダブルクリックで登録）",
+                                 use_container_width=True):
+                        now = _time.time()
+                        click_key = f"{user}_{day_str}"
+                        if (click_key == st.session_state.last_click_date and
+                                now - st.session_state.last_click_time < 0.8):
+                            st.session_state.last_click_date = None
+                            st.session_state.last_click_time = 0.0
+                            st.session_state.week_click_date = day
+                            st.session_state.week_click_user = user
+                            st.rerun()
+                        else:
+                            st.session_state.last_click_date = click_key
+                            st.session_state.last_click_time = now
+                # 予定クリックで編集（予定バーの下に小さく表示）
                 for _, ev in events.iterrows():
                     if st.button(f"✏️{ev['title'][:5]}", key=f"w_edit_{ev['id']}",
-                                 help="クリックして編集・削除"):
+                                 help="クリックして編集・削除", use_container_width=True):
                         st.session_state.week_click_event_id = int(ev['id'])
                         st.rerun()
 
