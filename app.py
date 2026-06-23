@@ -83,11 +83,11 @@ st.markdown(f"""
     /* 予定付箋 */
     .event-block {{ color: #333; padding: 4px 6px; border-radius: 3px; margin-bottom: 3px; font-size: 11px; line-height: 1.3; border-left: 4px solid rgba(0,0,0,0.2); box-shadow: 0 1px 2px rgba(0,0,0,0.05); }}
     /* マトリックスセルの透明ボタン */
-    div[data-testid='stButton'] button.cell-btn {
+    div[data-testid='stButton'] button.cell-btn {{
         position: absolute; top: 0; left: 0; width: 100%; height: 100%;
         opacity: 0; cursor: pointer; z-index: 1;
-    }
-    .matrix-cell { position: relative; }
+    }}
+    .matrix-cell {{ position: relative; }}
     /* サイドバーを非表示 */
     [data-testid="stSidebar"] {{ display: none; }}
     [data-testid="collapsedControl"] {{ display: none; }}
