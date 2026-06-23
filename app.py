@@ -261,132 +261,105 @@ with header_right:
 base_date_const = datetime.today().date()  # 常に今日の日付を基準にする
 
 # ==========================================
-# 1. 組織週間ビュー（マトリックス）
+# 1. 組織週間ビュー（streamlit-calendar）
 # ==========================================
 if view_mode == "組織週間 (マトリックス)":
-    st.caption("💡 枠をダブルクリック（ダブルタップ）で予定登録、予定をクリックで編集・削除ができます！")
+    st.caption("💡 枠をダブルタップで予定登録、予定バーをタップで編集・削除ができます！")
 
-    # 今週の日付リストを生成（日曜始まり）
+    # 社員ごとの色マップ
+    USER_COLORS = {
+        "乾 貴規":     "#4FC3F7",
+        "和田 章":     "#81C784",
+        "山田 尚子":   "#F06292",
+        "熱田 衣智":   "#FFB74D",
+        "商談室(設備)": "#CE93D8",
+    }
+
+    # 凡例を表示
+    legend_html = "<div style='display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px;'>"
+    for uname, ucolor in USER_COLORS.items():
+        legend_html += (
+            f"<div style='background:{ucolor}; padding:3px 10px; border-radius:12px; "
+            f"font-size:12px; font-weight:bold; color:#333;'>{uname}</div>"
+        )
+    legend_html += "</div>"
+    st.markdown(legend_html, unsafe_allow_html=True)
+
+    # 全ユーザーの予定をイベントリストに変換（社員ごとの色を使用）
+    week_cal_events = []
+    for _, row in df_schedules.iterrows():
+        if row['user_name'] == 'admin':
+            continue
+        # 予定自体の色 or 社員カラーをフォールバック
+        bg_color = row['color'] if row['color'] else USER_COLORS.get(row['user_name'], "#90CAF9")
+        week_cal_events.append({
+            "id": str(row['id']),
+            "title": f"[{row['user_name']}] {row['title']}",
+            "start": f"{row['date']}T{row['start_time']}:00",
+            "end": f"{row['date']}T{row['end_time']}:00",
+            "backgroundColor": bg_color,
+            "borderColor": bg_color,
+            "textColor": "#333333",
+        })
+
+    # 今週の月曜日を起点に初期表示日を設定
     today = datetime.today().date()
-    days_since_sunday = (today.weekday() + 1) % 7
-    start_of_week = today - timedelta(days=days_since_sunday)
-    week_days = [start_of_week + timedelta(days=i) for i in range(7)]
-    weekday_names = ["日", "月", "火", "水", "木", "金", "土"]
-    weekday_colors = ["#d9534f", "#333", "#333", "#333", "#333", "#0275d8", "#0275d8"]
-    users = [u for u in USER_CREDS.keys() if u != "admin"]
+    week_cal_options = {
+        "initialView": "dayGridWeek",
+        "initialDate": str(today),
+        "locale": "ja",
+        "firstDay": 0,
+        "selectable": True,
+        "headerToolbar": {
+            "left": "prev,next today",
+            "center": "title",
+            "right": ""
+        },
+        "height": 680,
+        "dayMaxEvents": False,
+    }
 
-    # ポップアップ処理
+    week_custom_css = (
+        ".fc-daygrid-day { cursor: pointer; }"
+        ".fc-daygrid-day:hover { background-color: #f0f7ff !important; }"
+        ".fc-day-sun .fc-daygrid-day-number { color: #d9534f; font-weight: bold; }"
+        ".fc-day-sat .fc-daygrid-day-number { color: #0275d8; font-weight: bold; }"
+        ".fc-event { font-size: 11px; border-radius: 3px; margin-bottom: 2px; }"
+        ".fc-day-today { background-color: #fffbef !important; }"
+    )
+
+    week_result = st_calendar(
+        events=week_cal_events,
+        options=week_cal_options,
+        custom_css=week_custom_css,
+        callbacks=["dateClick", "eventClick"],
+        key="org_week_cal"
+    )
+
     import time as _time
     if st.session_state.just_registered:
         st.session_state.just_registered = False
         st.session_state.last_click_date = None
         st.session_state.last_click_time = 0.0
-    elif st.session_state.get("week_click_date") and st.session_state.get("week_click_user"):
-        _date = st.session_state.week_click_date
-        _user = st.session_state.week_click_user
-        st.session_state.week_click_date = None
-        st.session_state.week_click_user = None
-        show_register_popup(_date, preset_user=_user)
-    elif st.session_state.get("week_click_event_id"):
-        _eid = st.session_state.week_click_event_id
-        st.session_state.week_click_event_id = None
-        show_edit_popup(_eid, df_schedules)
-
-    # 今週の表示ラベル
-    st.markdown(
-        f"<div style='font-size:15px; font-weight:bold; color:#0275d8; margin-bottom:8px;'>"
-        f"📅 {start_of_week.strftime('%Y年%m月%d日')} 〜 {week_days[-1].strftime('%m月%d日')}</div>",
-        unsafe_allow_html=True
-    )
-
-    # ヘッダー行
-    hdr_cols = st.columns([1.2] + [1]*7)
-    with hdr_cols[0]:
-        st.markdown(
-            "<div style='text-align:center; font-weight:bold; background:#f2f4f7; "
-            "padding:6px; border:1px solid #ccd1d9; font-size:12px;'>氏名</div>",
-            unsafe_allow_html=True
-        )
-    for i, (day, w_name) in enumerate(zip(week_days, weekday_names)):
-        with hdr_cols[i+1]:
-            is_today = (day == today)
-            bg = "#fff3cd" if is_today else "#f2f4f7"
-            border = "2px solid #f0ad4e" if is_today else "1px solid #ccd1d9"
-            st.markdown(
-                f"<div style='text-align:center; font-weight:bold; color:{weekday_colors[i]}; "
-                f"background:{bg}; padding:6px; border:{border}; font-size:12px;'>"
-                f"{day.month}/{day.day}<br>({w_name})</div>",
-                unsafe_allow_html=True
-            )
-
-    # 社員×曜日のマトリックス
-    for user in users:
-        row_cols = st.columns([1.2] + [1]*7)
-        with row_cols[0]:
-            st.markdown(
-                f"<div style='padding:4px; font-weight:bold; font-size:12px; "
-                f"border:1px solid #ccd1d9; min-height:90px; background:#fafafa; "
-                f"display:flex; align-items:center; justify-content:center; "
-                f"text-align:center;'>{user}</div>",
-                unsafe_allow_html=True
-            )
-        for i, day in enumerate(week_days):
-            with row_cols[i+1]:
-                day_str = str(day)
-                is_today = (day == today)
-                bg = "#fffbef" if is_today else "white"
-                border = "2px solid #f0ad4e" if is_today else "1px solid #ccd1d9"
-                events = df_schedules[
-                    (df_schedules['user_name'] == user) &
-                    (df_schedules['date'] == day_str)
-                ]
-                events_html = ""
-                for _, ev in events.iterrows():
-                    ev_bg = ev['color'] if ev['color'] else "#e3f2fd"
-                    events_html += (
-                        f"<div style='background:{ev_bg}; border-left:3px solid #999; "
-                        f"padding:2px 3px; margin-bottom:2px; border-radius:2px; font-size:10px; "
-                        f"overflow:hidden; white-space:nowrap; text-overflow:ellipsis;'>"
-                        f"<span style='color:#555;'>{ev['start_time']}</span> "
-                        f"<strong>{ev['title']}</strong></div>"
-                    )
-                # 枠全体を透明ボタンで覆う（ダブルクリックで登録）
-                cell_container = st.container()
-                with cell_container:
-                    # 予定と透明ボタンを重ねて表示
-                    st.markdown(
-                        f"<div class='matrix-cell' style='border:{border}; min-height:90px; "
-                        f"padding:3px; background:{bg}; position:relative;'>"
-                        f"{events_html}</div>",
-                        unsafe_allow_html=True
-                    )
-                    # 透明な全面ボタン（ダブルクリックで登録）
-                    btn_style = (
-                        "background:transparent; border:none; position:relative; "
-                        "width:100%; margin-top:-6px; color:transparent; "
-                        "cursor:pointer; font-size:1px;"
-                    )
-                    if st.button("　", key=f"w_add_{user}_{day_str}",
-                                 help=f"{user} / {day.month}/{day.day}（ダブルクリックで登録）",
-                                 use_container_width=True):
-                        now = _time.time()
-                        click_key = f"{user}_{day_str}"
-                        if (click_key == st.session_state.last_click_date and
-                                now - st.session_state.last_click_time < 0.8):
-                            st.session_state.last_click_date = None
-                            st.session_state.last_click_time = 0.0
-                            st.session_state.week_click_date = day
-                            st.session_state.week_click_user = user
-                            st.rerun()
-                        else:
-                            st.session_state.last_click_date = click_key
-                            st.session_state.last_click_time = now
-                # 予定クリックで編集（予定バーの下に小さく表示）
-                for _, ev in events.iterrows():
-                    if st.button(f"✏️{ev['title'][:5]}", key=f"w_edit_{ev['id']}",
-                                 help="クリックして編集・削除", use_container_width=True):
-                        st.session_state.week_click_event_id = int(ev['id'])
-                        st.rerun()
+    else:
+        if week_result and week_result.get("callback") == "dateClick":
+            from datetime import date as date_type
+            clicked_date_str = week_result["dateClick"]["date"][:10]
+            now = _time.time()
+            if (clicked_date_str == st.session_state.last_click_date and
+                    now - st.session_state.last_click_time < 0.8):
+                st.session_state.last_click_date = None
+                st.session_state.last_click_time = 0.0
+                clicked_date = date_type.fromisoformat(clicked_date_str)
+                show_register_popup(clicked_date)
+            else:
+                st.session_state.last_click_date = clicked_date_str
+                st.session_state.last_click_time = now
+        elif week_result and week_result.get("callback") == "eventClick":
+            st.session_state.last_click_date = None
+            st.session_state.last_click_time = 0.0
+            event_id = int(week_result["eventClick"]["event"]["id"])
+            show_edit_popup(event_id, df_schedules)
 
 # ==========================================
 # 2. 個人月間ビュー
